@@ -1,15 +1,12 @@
-import math
 import random
 import time
 import logging
 
-from copy import deepcopy
-from collections import namedtuple
-
-from sample_players import DataPlayer
+from sample_players import BasePlayer
+from mcts import uct_search
 
 
-class CustomPlayer(DataPlayer):
+class CustomPlayer(BasePlayer):
     """ Implement your own agent to play knight's Isolation
     The get_action() method is the only required method for this project.
     You can modify the interface for get_action by adding named parameters
@@ -25,7 +22,6 @@ class CustomPlayer(DataPlayer):
     """
     nround = 1
     statlist = []
-    plyturn = 1
 
 
     def get_action(self, state):
@@ -42,137 +38,11 @@ class CustomPlayer(DataPlayer):
           Refer to (and use!) the Isolation.play() function to run games.
         **********************************************************************
         """
-        self.plyturn = state.ply_count % 2
         logging.info("Move %s" % state.ply_count)
         self.queue.put(random.choice(state.actions()))
 
         while (self.queue._TimedQueue__stop_time - 0.05) > time.perf_counter():
-            next_action = self.uct_search(state)
+            next_action, self.statlist = uct_search(state, self.statlist, self.nround)
             self.queue.put(next_action)
             self.nround += 1
-
-
-    def uct_search(self, state):
-        next_state = self.tree_policy(state)
-        if not next_state.terminal_test():
-            delta = self.default_policy(next_state)
-            self.backup_negamax(delta)
-
-        return self.best_child(state, 0)
-
-
-    def tree_policy(self, state):
-        statecopy = deepcopy(state)
-
-        while not statecopy.terminal_test():
-            # All taken actions at this depth
-            tried = [s.action for s in self.statlist if s.state == statecopy]
-            # See if there's any untried actions left
-            untried = [a for a in statecopy.actions() if a not in tried]
-
-            topop = []
-            toappend = []
-
-            if len(untried) > 0:
-                next_action = random.choice(untried)
-                statecopy = self.expand(statecopy, next_action)
-                break
-            else:
-                next_action = self.best_child(statecopy, 1)
-
-                for k, s in enumerate(self.statlist):
-                    if s.state == statecopy and s.action == next_action:
-                        visit1 = self.statlist[k].visit + 1
-                        news = self.statlist[k]._replace(visit=visit1)
-                        news = news._replace(nround=self.nround)
-
-                        topop.append(k)
-                        toappend.append(news)
-                        break
-
-                self.update_scores(topop, toappend)
-                statecopy = statecopy.result(next_action)
-
-        return statecopy
-
-
-    def expand(self, state, action):
-        """
-        Returns a state resulting from taking an action from the list of untried nodes
-        """
-        Stat = namedtuple('Stat', 'state action utility visit nround')
-        self.statlist.append(Stat(state, action, 0, 1, self.nround))
-        return state.result(action)
-
-
-    def best_child(self, state, c):
-        """
-        Returns the state resulting from taking the best action
-        c value between 0 (max score) and 1 (prioritize exploration)
-        """
-        # All taken actions at this depth
-        tried = [s for s in self.statlist if s.state == state]
-
-        maxscore = -999
-        maxaction = []
-        # Compute the score
-        for t in tried:
-            score = (t.utility/t.visit) + c * math.sqrt(2 * math.log(self.nround)/t.visit)
-            if score > maxscore:
-                maxscore = score
-                del maxaction[:]
-                maxaction.append(t.action)
-            elif score == maxscore:
-                maxaction.append(t.action)
-
-        return random.choice(maxaction)
-
-
-    def default_policy(self, state):
-        """
-        The simulation to run when visiting unexplored nodes. Defaults to uniform random moves
-        """
-        while not state.terminal_test():
-            state = state.result(random.choice(state.actions()))
-
-        delta = state.utility(self.player_id)
-        if abs(delta) == float('inf') and delta < 0:
-            delta = -1
-        elif abs(delta) == float('inf') and delta > 0:
-            delta = 1
-        return delta
-
-
-    def backup_negamax(self, delta):
-        """
-        Propagates the terminal utility up the search tree
-        """
-        topop = []
-        toappend = []
-        for k, s in enumerate(self.statlist):
-            if s.nround == self.nround:
-                if s.state.ply_count % 2 == self.plyturn:
-                    utility1 = s.utility + delta
-                    news = self.statlist[k]._replace(utility=utility1)
-                elif s.state.ply_count % 2 != self.plyturn:
-                    utility1 = s.utility - delta
-                    news = self.statlist[k]._replace(utility=utility1)
-
-                topop.append(k)
-                toappend.append(news)
-
-        self.update_scores(topop, toappend)
-
-        return
-
-
-    def update_scores(self, topop, toappend):
-        # Remove outdated tuples. Order needs to be in reverse or pop will fail!
-        for p in sorted(topop, reverse=True):
-            self.statlist.pop(p)
-        # Add the updated ones
-        for a in toappend:
-            self.statlist.append(a)
-        return
-
 
