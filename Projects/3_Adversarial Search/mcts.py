@@ -57,8 +57,13 @@ def expand(state, statlist, action, nround):
     Returns a state resulting from taking an action from the list of untried nodes
     """
     Stat = namedtuple('Stat', 'state action utility visit nround')
-    statlist.append(Stat(state, action, 0, 1, nround))
-    return state.result(action), statlist
+    plyturn = state.ply_count % 2
+
+    next_state = state.result(action)
+    delta = map_delta(next_state.utility(plyturn))
+
+    statlist.append(Stat(state, action, delta, 1, nround))
+    return next_state, statlist
 
 
 def best_child(state, statlist, c):
@@ -91,12 +96,7 @@ def default_policy(state, plyturn):
     while not state.terminal_test():
         state = state.result(random.choice(state.actions()))
 
-    delta = state.utility(plyturn)
-    if abs(delta) == float('inf') and delta < 0:
-        delta = -1
-    elif abs(delta) == float('inf') and delta > 0:
-        delta = 1
-    return delta
+    return map_delta(state.utility(plyturn))
 
 
 def backup_negamax(statlist, delta, plyturn, nround):
@@ -131,5 +131,17 @@ def update_scores(statlist, topop, toappend):
         statlist.append(a)
 
     return statlist
+
+
+def map_delta(delta):
+    """
+    Normalizes the state utility to the range between -1 and 1
+    """
+    if delta < 0:
+        delta = -1
+    elif delta > 0:
+        delta = 1
+
+    return delta
 
 
