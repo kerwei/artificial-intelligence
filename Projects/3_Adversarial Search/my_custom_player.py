@@ -1,9 +1,15 @@
 import random
 import time
-import logging
+# import logging
+# import tracemalloc
 
 from sample_players import BasePlayer
 from mcts import uct_search
+# from memstats import display_top
+
+
+# tracemalloc.start()
+# logging.basicConfig(filename='matches.log',level=logging.NOTSET)
 
 
 class CustomPlayer(BasePlayer):
@@ -23,7 +29,6 @@ class CustomPlayer(BasePlayer):
     nround = 1
     statlist = []
 
-
     def get_action(self, state):
         """ Employ an adversarial search technique to choose an action
         available in the current state calls self.queue.put(ACTION) at least
@@ -38,11 +43,13 @@ class CustomPlayer(BasePlayer):
           Refer to (and use!) the Isolation.play() function to run games.
         **********************************************************************
         """
-        logging.info("Move %s" % state.ply_count)
+        # logging.info("Move %s" % state.ply_count)
         self.queue.put(random.choice(state.actions()))
 
         while (self.queue._TimedQueue__stop_time - 0.05) > time.perf_counter():
             next_action, self.statlist = uct_search(state, self.statlist, self.nround)
             self.queue.put(next_action)
             self.nround += 1
-
+        
+        # snapshot1 = tracemalloc.take_snapshot()
+        # display_top(snapshot1, 'lineno', 10)
